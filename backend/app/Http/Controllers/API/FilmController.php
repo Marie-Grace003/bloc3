@@ -1,0 +1,65 @@
+<?php
+
+namespace App\Http\Controllers\API;
+
+use App\Http\Controllers\Controller;
+use App\Models\Film;
+use Illuminate\Http\Request;
+
+class FilmController extends Controller
+{
+    public function index()
+    {
+        return response()->json(
+            Film::with('category')->get()
+        );
+    }
+
+    public function store(Request $request)
+    {
+        $validated = $request->validate([
+            'title'        => 'required|string|max:255',
+            'synopsis'     => 'nullable|string',
+            'duration_min' => 'nullable|integer|min:1',
+            'poster'       => 'nullable|string|max:255',
+            'actors'       => 'nullable|string',
+            'release_date' => 'nullable|date',
+            'status'       => 'required|in:showing,coming_soon',
+            'id_category'  => 'nullable|exists:categories,id_category',
+        ]);
+
+        $film = Film::create($validated);
+
+        return response()->json($film->load('category'), 201);
+    }
+
+    public function show(Film $film)
+    {
+        return response()->json($film->load('category'));
+    }
+
+    public function update(Request $request, Film $film)
+    {
+        $validated = $request->validate([
+            'title'        => 'required|string|max:255',
+            'synopsis'     => 'nullable|string',
+            'duration_min' => 'nullable|integer|min:1',
+            'poster'       => 'nullable|string|max:255',
+            'actors'       => 'nullable|string',
+            'release_date' => 'nullable|date',
+            'status'       => 'required|in:showing,coming_soon',
+            'id_category'  => 'nullable|exists:categories,id_category',
+        ]);
+
+        $film->update($validated);
+
+        return response()->json($film->load('category'));
+    }
+
+    public function destroy(Film $film)
+    {
+        $film->delete();
+
+        return response()->json(null, 204);
+    }
+}
