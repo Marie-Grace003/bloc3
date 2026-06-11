@@ -4,7 +4,9 @@ import api from '../api/axios'
 const AuthContext = createContext()
 
 export function AuthProvider({ children }) {
-    const [user, setUser] = useState(null)
+    const [user, setUser] = useState(
+        JSON.parse(localStorage.getItem('user'))
+    )
     const [token, setToken] = useState(localStorage.getItem('token'))
     const [loading, setLoading] = useState(false)
 
@@ -13,6 +15,7 @@ export function AuthProvider({ children }) {
             localStorage.setItem('token', token)
         } else {
             localStorage.removeItem('token')
+            localStorage.removeItem('user')
         }
     }, [token])
 
@@ -22,6 +25,7 @@ export function AuthProvider({ children }) {
             const response = await api.post('/login', { email, password })
             setToken(response.data.token)
             setUser(response.data.user)
+            localStorage.setItem('user', JSON.stringify(response.data.user))
             return response.data
         } finally {
             setLoading(false)
@@ -34,6 +38,7 @@ export function AuthProvider({ children }) {
             const response = await api.post('/register', data)
             setToken(response.data.token)
             setUser(response.data.user)
+            localStorage.setItem('user', JSON.stringify(response.data.user))
             return response.data
         } finally {
             setLoading(false)
@@ -46,6 +51,8 @@ export function AuthProvider({ children }) {
         } finally {
             setToken(null)
             setUser(null)
+            localStorage.removeItem('user')
+            localStorage.removeItem('token')
         }
     }
 

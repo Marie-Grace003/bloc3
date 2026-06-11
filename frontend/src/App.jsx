@@ -4,6 +4,7 @@ import Register from './pages/public/Register'
 import Home from './pages/public/Home'
 import Films from './pages/public/Films'
 import Dashboard from './pages/admin/Dashboard'
+import PrivateRoute from './components/PrivateRoute'
 
 function App() {
   return (
@@ -13,7 +14,11 @@ function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route path="/films" element={<Films />} />
-        <Route path="/admin" element={<Dashboard />} />
+        <Route path="/admin" element={
+          <PrivateRoute adminOnly={true}>
+            <Dashboard />
+          </PrivateRoute>
+        } />
       </Routes>
     </BrowserRouter>
   )
