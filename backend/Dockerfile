@@ -1,5 +1,5 @@
 # --- ÉTAPE 1 : Base commune avec toutes les extensions PHP nécessaires ---
-FROM php:8.3-apache AS base
+FROM php:8.4-apache AS base
 
 # Installe les dépendances système nécessaires (y compris pour la gestion d'images et les fichiers zip)
 RUN apt-get update && apt-get install -y \
