@@ -43,40 +43,31 @@ jobs:
         run: php artisan test --coverage --min=60
 
   deploy:
-    needs: [build-test, backend-tests] # 👈 S'exécute uniquement si les tests passent au vert !
+    needs: [build-test, backend-tests] 
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/feature/docker-setup' || github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      # Connexion SSH sécurisée pour commander à LWS de se mettre à jour via Git
+      - name: Executing remote SSH commands using ssh-key
+        uses: appleboy/ssh-action@v1.0.3
         with:
-          node-version: '20'
-
-      # Compiler le frontend pour générer les fichiers statiques HTML/JS/CSS
-      - name: Install Frontend Dependencies & Build
-        run: |
-          cd frontend
-          npm install
-          npm run build
-
-      - name: Setup PHP for Production Prep
-        uses: shivammathur/setup-php@v2
-        with:
-          php-version: '8.4'
-
-      # Préparer le dossier backend en enlevant les fichiers de dev
-      - name: Install Backend Production Dependencies
-        run: |
-          cd backend
-          composer install --no-dev --optimize-autoloader --ignore-platform-reqs
-
-      # Envoyer l'intégralité du projet sur le serveur LWS via le FTP sécurisé
-      - name: Sync files to LWS FTP
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
-        with:
-          server: ${{ secrets.FTP_SERVER }}
-          username: ${{ secrets.FTP_USERNAME }}
-          password: ${{ secrets.FTP_PASSWORD }}
-          local-dir: ./
+          host: 91.234.195.181
+          username: c2733348c
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: 147
+          script: |
+            cd public_html/ephraim-grace
+            git checkout feature/docker-setup
+            git pull origin feature/docker-setup
+            
+            # Mettre à jour le backend Laravel directement sur le serveur LWS
+            cd backend
+            composer install --no-dev --optimize-autoloader --ignore-platform-reqs
+            php artisan migrate --force
+            
+            # Compiler le frontend React/Vue directement sur le serveur LWS
+            cd ../frontend
+            npm install
+            npm run build
