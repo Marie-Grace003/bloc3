@@ -7,7 +7,7 @@ use App\Models\Booking;
 use App\Models\Screening;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-
+use Illuminate\Support\Facades\DB;
 class BookingController extends Controller
 {
     public function index()
@@ -28,13 +28,19 @@ class BookingController extends Controller
     }
 
     public function store(Request $request)
-    {
-        $validated = $request->validate([
-            'seats_count'  => 'required|integer|min:1',
-            'id_screening' => 'required|exists:screenings,id_screening',
-        ]);
+{
+    $validated = $request->validate([
+        'seats_count'  => 'required|integer|min:1',
+        'id_screening' => 'required|exists:screenings,id_screening',
+    ]);
 
-        $screening = Screening::findOrFail($validated['id_screening']);
+    return DB::transaction(function () use ($validated) {
+        // lockForUpdate() verrouille la ligne en base jusqu'à la fin
+        // de la transaction : aucune autre requête concurrente ne peut
+        // lire/modifier cette séance tant qu'on n'a pas fini.
+        $screening = Screening::where('id_screening', $validated['id_screening'])
+            ->lockForUpdate()
+            ->firstOrFail();
 
         if ($screening->seats_remaining < $validated['seats_count']) {
             return response()->json([
@@ -62,31 +68,8 @@ class BookingController extends Controller
         $screening->decrement('seats_remaining', $validated['seats_count']);
 
         return response()->json($booking->load(['screening.film', 'screening.room']), 201);
-    }
-
-    public function show(Booking $booking)
-    {
-        return response()->json($booking->load(['screening.film', 'screening.room']));
-    }
-
-    public function update(Request $request, Booking $booking)
-    {
-        $validated = $request->validate([
-            'status' => 'required|in:pending,confirmed,expired,cancelled',
-        ]);
-
-        $oldStatus = $booking->status;
-        $booking->update($validated);
-
-        if (
-            in_array($validated['status'], ['expired', 'cancelled'])
-            && !in_array($oldStatus, ['expired', 'cancelled'])
-        ) {
-            $booking->screening->increment('seats_remaining', $booking->seats_count);
-        }
-
-        return response()->json($booking->load(['screening.film', 'screening.room']));
-    }
+    });
+}
 
     public function destroy(Booking $booking)
     {
