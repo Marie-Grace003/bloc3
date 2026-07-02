@@ -20,17 +20,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup PHP 8.3
+      - name: Setup PHP 8.4
         uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.3'
+          php-version: '8.4' 
+          extensions: mbstring, dom, fileinfo, sqlite, pdo_sqlite
           coverage: pcov
 
       - name: Copy .env
         run: cp .env.example .env
 
       - name: Install Composer dependencies
-        run: composer install --no-interaction --prefer-dist
+        run: composer install --no-interaction --prefer-dist --ignore-platform-reqs # 👈 Ajout de la sécurité pour les paquets
 
       - name: Generate app key
         run: php artisan key:generate
