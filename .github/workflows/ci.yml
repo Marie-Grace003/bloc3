@@ -24,6 +24,7 @@ jobs:
         uses: shivammathur/setup-php@v2
         with:
           php-version: '8.3'
+          coverage: pcov
 
       - name: Copy .env
         run: cp .env.example .env
@@ -34,8 +35,8 @@ jobs:
       - name: Generate app key
         run: php artisan key:generate
 
-      - name: Run PHPUnit tests
+      - name: Run PHPUnit tests with coverage
         env:
           DB_CONNECTION: sqlite
           DB_DATABASE: ":memory:"
-        run: php artisan test
+        run: php artisan test --coverage --min=60
