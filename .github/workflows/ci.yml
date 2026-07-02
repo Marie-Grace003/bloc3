@@ -1,4 +1,4 @@
-name: CI Pipeline
+name: CI/CD Pipeline
 on:
   push:
     branches: [ main, feature/docker-setup ]
@@ -23,7 +23,7 @@ jobs:
       - name: Setup PHP 8.4
         uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.4' 
+          php-version: '8.4'
           extensions: mbstring, dom, fileinfo, sqlite, pdo_sqlite
           coverage: pcov
 
@@ -31,7 +31,7 @@ jobs:
         run: cp .env.example .env
 
       - name: Install Composer dependencies
-        run: composer install --no-interaction --prefer-dist --ignore-platform-reqs # 👈 Ajout de la sécurité pour les paquets
+        run: composer install --no-interaction --prefer-dist --ignore-platform-reqs
 
       - name: Generate app key
         run: php artisan key:generate
@@ -41,3 +41,42 @@ jobs:
           DB_CONNECTION: sqlite
           DB_DATABASE: ":memory:"
         run: php artisan test --coverage --min=60
+
+  deploy:
+    needs: [build-test, backend-tests] # 👈 S'exécute uniquement si les tests passent au vert !
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/feature/docker-setup' || github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # Compiler le frontend pour générer les fichiers statiques HTML/JS/CSS
+      - name: Install Frontend Dependencies & Build
+        run: |
+          cd frontend
+          npm install
+          npm run build
+
+      - name: Setup PHP for Production Prep
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+
+      # Préparer le dossier backend en enlevant les fichiers de dev
+      - name: Install Backend Production Dependencies
+        run: |
+          cd backend
+          composer install --no-dev --optimize-autoloader --ignore-platform-reqs
+
+      # Envoyer l'intégralité du projet sur le serveur LWS via le FTP sécurisé
+      - name: Sync files to LWS FTP
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          local-dir: ./
