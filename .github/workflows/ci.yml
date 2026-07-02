@@ -49,25 +49,31 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Connexion SSH sécurisée pour commander à LWS de se mettre à jour via Git
-      - name: Executing remote SSH commands using ssh-key
-        uses: appleboy/ssh-action@v1.0.3
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          host: 91.234.195.181
-          username: c2733348c
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          port: 147
-          script: |
-            cd public_html/ephraim-grace
-            git checkout feature/docker-setup
-            git pull origin feature/docker-setup
-            
-            # Mettre à jour le backend Laravel directement sur le serveur LWS
-            cd backend
-            composer install --no-dev --optimize-autoloader --ignore-platform-reqs
-            php artisan migrate --force
-            
-            # Compiler le frontend React/Vue directement sur le serveur LWS
-            cd ../frontend
-            npm install
-            npm run build
+          node-version: '24'
+
+      # On compile le frontend sur GitHub
+      - name: Install Frontend Dependencies & Build
+        run: |
+          cd frontend
+          npm install
+          npm run build
+
+      # Déploiement FTP ultra-rapide (uniquement les fichiers mis à jour, SANS les dépendances lourdes)
+      - name: Sync files to LWS FTP
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: 91.234.195.181
+          username: ephraim-grace@ifran-b3dev.com
+          password: ${{ secrets.FTP_PASSWORD }}
+          local-dir: ./
+          exclude: |
+            **/node_modules/**
+            **/vendor/**
+            **/.git/**
+            **/.github/**
+            backend/storage/framework/cache/**
+            backend/storage/framework/sessions/**
+            backend/storage/framework/views/**
