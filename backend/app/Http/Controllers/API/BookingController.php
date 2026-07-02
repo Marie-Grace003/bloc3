@@ -8,6 +8,7 @@ use App\Models\Screening;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+
 class BookingController extends Controller
 {
     public function index()
@@ -28,48 +29,87 @@ class BookingController extends Controller
     }
 
     public function store(Request $request)
-{
-    $validated = $request->validate([
-        'seats_count'  => 'required|integer|min:1',
-        'id_screening' => 'required|exists:screenings,id_screening',
-    ]);
-
-    return DB::transaction(function () use ($validated) {
-        // lockForUpdate() verrouille la ligne en base jusqu'à la fin
-        // de la transaction : aucune autre requête concurrente ne peut
-        // lire/modifier cette séance tant qu'on n'a pas fini.
-        $screening = Screening::where('id_screening', $validated['id_screening'])
-            ->lockForUpdate()
-            ->firstOrFail();
-
-        if ($screening->seats_remaining < $validated['seats_count']) {
-            return response()->json([
-                'message' => 'Not enough seats available.'
-            ], 422);
-        }
-
-        $screeningDateTime = \Carbon\Carbon::parse($screening->date . ' ' . $screening->time);
-        $expiresAt = $screeningDateTime->subHours(3);
-
-        if ($expiresAt->isPast()) {
-            return response()->json([
-                'message' => 'Cette séance débute dans moins de 3h. Réservez sur place.'
-            ], 422);
-        }
-
-        $booking = Booking::create([
-            'seats_count'  => $validated['seats_count'],
-            'status'       => 'pending',
-            'expires_at'   => $expiresAt,
-            'id_user'      => Auth::id(),
-            'id_screening' => $validated['id_screening'],
+    {
+        $validated = $request->validate([
+            'seats_count'  => 'required|integer|min:1',
+            'id_screening' => 'required|exists:screenings,id_screening',
         ]);
 
-        $screening->decrement('seats_remaining', $validated['seats_count']);
+        return DB::transaction(function () use ($validated) {
+            $screening = Screening::where('id_screening', $validated['id_screening'])
+                ->lockForUpdate()
+                ->firstOrFail();
 
-        return response()->json($booking->load(['screening.film', 'screening.room']), 201);
-    });
-}
+            if ($screening->seats_remaining < $validated['seats_count']) {
+                return response()->json([
+                    'message' => 'Not enough seats available.'
+                ], 422);
+            }
+
+            $screeningDateTime = \Carbon\Carbon::parse($screening->date . ' ' . $screening->time);
+            $expiresAt = $screeningDateTime->subHours(3);
+
+            if ($expiresAt->isPast()) {
+                return response()->json([
+                    'message' => 'Cette séance débute dans moins de 3h. Réservez sur place.'
+                ], 422);
+            }
+
+            $booking = Booking::create([
+                'seats_count'  => $validated['seats_count'],
+                'status'       => 'pending',
+                'expires_at'   => $expiresAt,
+                'id_user'      => Auth::id(),
+                'id_screening' => $validated['id_screening'],
+            ]);
+
+            $screening->decrement('seats_remaining', $validated['seats_count']);
+
+            return response()->json($booking->load(['screening.film', 'screening.room']), 201);
+        });
+    }
+
+    public function show(Booking $booking)
+    {
+        // Sécurité : Un utilisateur classique ne peut voir que son propre ticket
+        if ($booking->id_user !== Auth::id() && !Auth::user()->isAdmin()) {
+            return response()->json(['message' => 'Unauthorized.'], 403);
+        }
+
+        return response()->json($booking->load(['user', 'screening.film', 'screening.room']));
+    }
+
+    public function update(Request $request, Booking $booking)
+    {
+        if (!Auth::user()->isAdmin()) {
+            return response()->json(['message' => 'Unauthorized.'], 403);
+        }
+
+        $validated = $request->validate([
+            'status' => 'required|in:pending,confirmed,expired,cancelled',
+        ]);
+
+        $oldStatus = $booking->status;
+        $booking->update($validated);
+
+        if (
+            in_array($validated['status'], ['expired', 'cancelled'])
+            && !in_array($oldStatus, ['expired', 'cancelled'])
+        ) {
+            $booking->screening->increment('seats_remaining', $booking->seats_count);
+        }
+        elseif (
+            !in_array($validated['status'], ['expired', 'cancelled'])
+            && in_array($oldStatus, ['expired', 'cancelled'])
+        ) {
+            if ($booking->screening->seats_remaining < $booking->seats_count) {
+                return response()->json(['message' => 'Plus de places disponibles pour restaurer.'], 422);
+            }
+            $booking->screening->decrement('seats_remaining', $booking->seats_count);
+        }
+
+        return response()->json($booking->load(['screening.film', 'screening.room']));
+    }
 
     public function destroy(Booking $booking)
     {
